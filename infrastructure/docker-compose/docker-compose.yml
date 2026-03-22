@@ -1,0 +1,330 @@
+version: '3.8'
+
+services:
+  # ==================== 数据库层 ====================
+  
+  # TiDB (兼容MySQL协议的分布式数据库)
+  tidb:
+    image: pingcap/tidb:v7.5.0
+    container_name: ecommerce-tidb
+    ports:
+      - "4000:4000"
+      - "10080:10080"
+    volumes:
+      - tidb-data:/data
+    environment:
+      - TIDB_HOST=0.0.0.0
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10080/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PD (Placement Driver for TiDB)
+  pd:
+    image: pingcap/pd:v7.5.0
+    container_name: ecommerce-pd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - pd-data:/data
+    command:
+      - --name=pd
+      - --client-urls=http://0.0.0.0:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --data-dir=/data
+    networks:
+      - ecommerce-network
+
+  # Tikv (TiKV Storage Engine)
+  tikv:
+    image: pingcap/tikv:v7.5.0
+    container_name: ecommerce-tikv
+    volumes:
+      - tikv-data:/data
+    command:
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=tikv:20160
+      - --data-dir=/data
+      - --pd=pd:2379
+    depends_on:
+      - pd
+    networks:
+      - ecommerce-network
+
+  # ==================== 缓存层 ====================
+  
+  # Redis Cluster (6节点: 3主3从)
+  redis-node-1:
+    image: redis:7.2-alpine
+    container_name: ecommerce-redis-1
+    ports:
+      - "7001:7001"
+    volumes:
+      - ./config/redis/redis-7001.conf:/etc/redis/redis.conf
+      - redis-1-data:/data
+    command: redis-server /etc/redis/redis.conf
+    networks:
+      - ecommerce-network
+
+  redis-node-2:
+    image: redis:7.2-alpine
+    container_name: ecommerce-redis-2
+    ports:
+      - "7002:7002"
+    volumes:
+      - ./config/redis/redis-7002.conf:/etc/redis/redis.conf
+      - redis-2-data:/data
+    command: redis-server /etc/redis/redis.conf
+    networks:
+      - ecommerce-network
+
+  redis-node-3:
+    image: redis:7.2-alpine
+    container_name: ecommerce-redis-3
+    ports:
+      - "7003:7003"
+    volumes:
+      - ./config/redis/redis-7003.conf:/etc/redis/redis.conf
+      - redis-3-data:/data
+    command: redis-server /etc/redis/redis.conf
+    networks:
+      - ecommerce-network
+
+  # ==================== 消息队列层 ====================
+  
+  # Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    container_name: ecommerce-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - ecommerce-network
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: ecommerce-kafka-1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9093,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+    networks:
+      - ecommerce-network
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: ecommerce-kafka-2
+    depends_on:
+      - zookeeper
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+    networks:
+      - ecommerce-network
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: ecommerce-kafka-3
+    depends_on:
+      - zookeeper
+    ports:
+      - "9095:9095"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9095
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+    networks:
+      - ecommerce-network
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: ecommerce-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_VHOST: ecommerce
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - ecommerce-network
+
+  # ==================== 服务注册与配置中心 ====================
+  
+  # Nacos
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: ecommerce-nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: tidb
+      MYSQL_SERVICE_PORT: 4000
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: ""
+      MYSQL_SERVICE_DB_NAME: nacos
+    depends_on:
+      - tidb
+    networks:
+      - ecommerce-network
+
+  # ==================== 监控层 ====================
+  
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: ecommerce-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - ecommerce-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: ecommerce-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - ecommerce-network
+
+  # ==================== 日志层 ====================
+  
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: ecommerce-elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - ecommerce-network
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: ecommerce-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - ecommerce-network
+
+  # Logstash
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.1
+    container_name: ecommerce-logstash
+    ports:
+      - "5044:5044"
+    volumes:
+      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+    networks:
+      - ecommerce-network
+
+  # ==================== 搜索引擎 ====================
+  
+  # MinIO (对象存储)
+  minio:
+    image: minio/minio:latest
+    container_name: ecommerce-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    driver: bridge
+
+volumes:
+  tidb-data:
+  pd-data:
+  tikv-data:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  rabbitmq-data:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+  minio-data:

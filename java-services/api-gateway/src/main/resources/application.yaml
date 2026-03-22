@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yaml
+    gateway:
+      routes:
+        - id: customer-service
+          uri: lb://customer-service
+          predicates:
+            - Path=/api/v1/chat/**,/api/v1/knowledge/**
+          filters:
+            - StripPrefix=0
+            
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - StripPrefix=0
+            
+        - id: purchase-service
+          uri: lb://purchase-service
+          predicates:
+            - Path=/api/v1/purchase/**
+          filters:
+            - StripPrefix=0
+            
+        - id: product-service
+          uri: lb://product-service
+          predicates:
+            - Path=/api/v1/products/**
+          filters:
+            - StripPrefix=0
+            
+        - id: platform-douyin
+          uri: lb://platform-douyin
+          predicates:
+            - Path=/api/v1/platform/douyin/**
+          filters:
+            - StripPrefix=0
+            
+        - id: platform-taobao
+          uri: lb://platform-taobao
+          predicates:
+            - Path=/api/v1/platform/taobao/**
+          filters:
+            - StripPrefix=0
+            
+        - id: platform-xiaohongshu
+          uri: lb://platform-xiaohongshu
+          predicates:
+            - Path=/api/v1/platform/xiaohongshu/**
+          filters:
+            - StripPrefix=0
+            
+        - id: platform-1688
+          uri: lb://platform-1688
+          predicates:
+            - Path=/api/v1/platform/1688/**
+          filters:
+            - StripPrefix=0
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG

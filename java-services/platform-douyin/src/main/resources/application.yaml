@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: platform-douyin
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+douyin:
+  app-id: ${DOUYIN_APP_ID:your-app-id}
+  app-secret: ${DOUYIN_APP_SECRET:your-app-secret}
+  api-url: https://developer.toutiao.com
+  callback-url: ${DOUYIN_CALLBACK_URL:http://localhost:8081/api/v1/platform/douyin/callback/message}
+
+logging:
+  level:
+    com.ecommerce: DEBUG
+    org.springframework.kafka: INFO

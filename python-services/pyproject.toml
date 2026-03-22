@@ -1,0 +1,22 @@
+[project]
+name = "ecommerce-customer-service"
+version = "1.0.0"
+description = "全自动网店客服采购系统 - Python服务"
+authors = [{name = "E-commerce Team"}]
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
