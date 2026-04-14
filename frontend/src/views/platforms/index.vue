@@ -94,16 +94,13 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getPlatformList, connectPlatform, updatePlatformConfig, syncPlatformData } from '@/api/platform'
 
 const activePlatform = ref('douyin')
-
-const platforms = ref([
-  { code: 'douyin', name: '抖音', icon: 'VideoCamera', color: '#fe2c55', connected: true, stats: { orders: 45, messages: 12 } },
-  { code: 'taobao', name: '淘宝/千牛', icon: 'Shop', color: '#ff5000', connected: true, stats: { orders: 32, messages: 8 } },
-  { code: 'xiaohongshu', name: '小红书', icon: 'PictureFilled', color: '#ff2442', connected: false, stats: { orders: 0, messages: 0 } },
-  { code: 'a1688', name: '1688采购', icon: 'ShoppingCart', color: '#ff6a00', connected: true, stats: { orders: 28, messages: 0 } }
-])
+const loading = ref(false)
+const platforms = ref([])
 
 const apiConfig = reactive({
   douyin: { appId: '', appSecret: '', callbackUrl: '' },
@@ -112,20 +109,66 @@ const apiConfig = reactive({
   a1688: { appKey: '', appSecret: '', account: '' }
 })
 
-const handleConnect = (platform) => {
-  console.log('连接平台:', platform.name)
+// 获取平台列表
+const fetchPlatformList = async () => {
+  try {
+    const res = await getPlatformList()
+    platforms.value = res.data || []
+    // 加载配置到表单
+    platforms.value.forEach(p => {
+      if (apiConfig[p.code] && p.config) {
+        Object.assign(apiConfig[p.code], p.config)
+      }
+    })
+  } catch (error) {
+    ElMessage.error('获取平台列表失败')
+  }
+}
+
+onMounted(() => {
+  fetchPlatformList()
+})
+
+const handleConnect = async (platform) => {
+  try {
+    loading.value = true
+    await connectPlatform(platform.code, {})
+    ElMessage.success(`${platform.name}连接成功`)
+    fetchPlatformList()
+  } catch (error) {
+    ElMessage.error(`${platform.name}连接失败`)
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleConfig = (platform) => {
   activePlatform.value = platform.code
 }
 
-const handleSync = (platform) => {
-  console.log('同步数据:', platform.name)
+const handleSync = async (platform) => {
+  try {
+    loading.value = true
+    await syncPlatformData(platform.code)
+    ElMessage.success(`${platform.name}数据同步成功`)
+    fetchPlatformList()
+  } catch (error) {
+    ElMessage.error(`${platform.name}同步失败`)
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleSaveConfig = () => {
-  console.log('保存配置:', apiConfig)
+const handleSaveConfig = async () => {
+  try {
+    loading.value = true
+    await updatePlatformConfig(activePlatform.value, apiConfig[activePlatform.value])
+    ElMessage.success('配置保存成功')
+  } catch (error) {
+    ElMessage.error('保存失败')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

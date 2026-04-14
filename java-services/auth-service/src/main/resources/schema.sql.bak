@@ -1,0 +1,41 @@
+-- Auth Service Database Schema
+-- Updated to include phone and OAuth provider fields
+
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    phone VARCHAR(20) UNIQUE,
+    wechat_openid VARCHAR(100) UNIQUE,
+    douyin_openid VARCHAR(100) UNIQUE,
+    xiaohongshu_id VARCHAR(100) UNIQUE,
+    ali_id VARCHAR(100) UNIQUE,
+    role VARCHAR(20) NOT NULL DEFAULT 'USER',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    account_non_expired BOOLEAN NOT NULL DEFAULT TRUE,
+    account_non_locked BOOLEAN NOT NULL DEFAULT TRUE,
+    credentials_non_expired BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP NULL
+);
+
+-- Create indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_wechat_openid ON users(wechat_openid);
+CREATE INDEX IF NOT EXISTS idx_douyin_openid ON users(douyin_openid);
+CREATE INDEX IF NOT EXISTS idx_xiaohongshu_id ON users(xiaohongshu_id);
+CREATE INDEX IF NOT EXISTS idx_ali_id ON users(ali_id);
+
+-- Insert default admin user (password: admin123, BCrypt encoded)
+INSERT INTO users (username, password, email, role, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+SELECT 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EHsM8lE9lBOsl7iAt6Z5EHsM8lE', 'admin@ecommerce.com', 'ADMIN', TRUE, TRUE, TRUE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin');
+
+-- Insert default test user (password: user123, BCrypt encoded)
+INSERT INTO users (username, password, email, role, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+SELECT 'user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EHsM8lE9lBOsl7iAt6Z5EHsM8lE', 'user@ecommerce.com', 'USER', TRUE, TRUE, TRUE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'user');

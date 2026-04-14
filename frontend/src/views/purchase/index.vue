@@ -18,7 +18,7 @@
             </div>
           </template>
           
-          <el-table :data="purchaseList" style="width: 100%">
+          <el-table :data="purchaseList" v-loading="loading" style="width: 100%">
             <el-table-column type="selection" width="50" />
             <el-table-column prop="orderNo" label="销售订单号" width="180" />
             <el-table-column prop="productName" label="商品名称" show-overflow-tooltip />
@@ -66,19 +66,19 @@
           </template>
           <div class="stats-grid">
             <div class="stat-item">
-              <div class="stat-value">¥12,450.00</div>
+              <div class="stat-value">¥{{ purchaseStats.todayAmount?.toFixed(2) || '0.00' }}</div>
               <div class="stat-label">今日采购额</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">¥3,280.00</div>
+              <div class="stat-value">¥{{ purchaseStats.todayProfit?.toFixed(2) || '0.00' }}</div>
               <div class="stat-label">今日利润</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">26.3%</div>
+              <div class="stat-value">{{ purchaseStats.profitRate?.toFixed(1) || '0.0' }}%</div>
               <div class="stat-label">利润率</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">45</div>
+              <div class="stat-value">{{ purchaseStats.orderCount || 0 }}</div>
               <div class="stat-label">采购订单数</div>
             </div>
           </div>
@@ -110,48 +110,149 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getPurchaseList, createPurchase, confirmPurchase, rejectPurchase, getPurchaseStats, getManualConfirmList } from '@/api/purchase'
+
+const router = useRouter()
 
 const filters = reactive({
   status: ''
 })
 
-const purchaseList = ref([
-  { orderNo: 'DD202401150001', productName: 'iPhone 15 Pro Max 256GB', supplier: '深圳数码批发', sourcePrice: 7500, sellPrice: 8999, profit: 1499, status: 'pending', statusText: '待采购', paymentType: 'auto' },
-  { orderNo: 'DD202401150002', productName: 'MacBook Air M3', supplier: '广州电子城', sourcePrice: 7200, sellPrice: 8499, profit: 1299, status: 'processing', statusText: '采购中', paymentType: 'auto' },
-  { orderNo: 'DD202401150003', productName: 'AirPods Pro 2', supplier: '东莞耳机批发', sourcePrice: 1400, sellPrice: 1899, profit: 499, status: 'completed', statusText: '已采购', paymentType: 'auto' },
-  { orderNo: 'DD202401150004', productName: 'iPad Pro 12.9', supplier: '深圳数码批发', sourcePrice: 9200, sellPrice: 10999, profit: 1799, status: 'pending', statusText: '待采购', paymentType: 'manual' },
-  { orderNo: 'DD202401150005', productName: 'Apple Watch Ultra 2', supplier: '广州电子城', sourcePrice: 5500, sellPrice: 6499, profit: 999, status: 'failed', statusText: '采购失败', paymentType: 'auto' }
-])
+const loading = ref(false)
+const purchaseList = ref([])
+const manualConfirmList = ref([])
+const purchaseStats = ref({
+  todayAmount: 0,
+  todayProfit: 0,
+  profitRate: 0,
+  orderCount: 0
+})
 
-const manualConfirmList = ref([
-  { orderNo: 'DD202401150004', amount: 9200, reason: '金额超过自动采购阈值' },
-  { orderNo: 'DD202401150006', amount: 15000, reason: '新供应商首次采购' }
-])
+// 获取采购列表
+const fetchPurchaseList = async () => {
+  loading.value = true
+  try {
+    const res = await getPurchaseList({ status: filters.status })
+    purchaseList.value = res.data?.list || []
+  } catch (error) {
+    ElMessage.error('获取采购列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取待确认列表
+const fetchManualConfirmList = async () => {
+  try {
+    const res = await getManualConfirmList()
+    manualConfirmList.value = res.data || []
+  } catch (error) {
+    manualConfirmList.value = []
+  }
+}
+
+// 获取采购统计
+const fetchPurchaseStats = async () => {
+  try {
+    const res = await getPurchaseStats()
+    purchaseStats.value = res.data || {}
+  } catch (error) {
+    purchaseStats.value = { todayAmount: 0, todayProfit: 0, profitRate: 0, orderCount: 0 }
+  }
+}
+
+onMounted(() => {
+  fetchPurchaseList()
+  fetchManualConfirmList()
+  fetchPurchaseStats()
+})
 
 const getStatusType = (status) => {
   const types = { pending: 'warning', processing: 'primary', completed: 'success', failed: 'danger' }
   return types[status] || 'info'
 }
 
-const handleAutoPurchase = () => {
-  console.log('一键采购')
+const handleAutoPurchase = async () => {
+  try {
+    await ElMessageBox.confirm('确认一键采购所有待采购订单?', '提示', { type: 'warning' })
+    loading.value = true
+    // 批量创建采购订单
+    const pendingOrders = purchaseList.value.filter(item => item.status === 'pending')
+    for (const order of pendingOrders) {
+      await createPurchase({ orderNo: order.orderNo })
+    }
+    ElMessage.success('批量采购成功')
+    fetchPurchaseList()
+    fetchPurchaseStats()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('采购失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-const handlePurchase = (row) => {
-  console.log('采购:', row)
+const handlePurchase = async (row) => {
+  try {
+    loading.value = true
+    await createPurchase({ orderNo: row.orderNo })
+    ElMessage.success('采购订单创建成功')
+    fetchPurchaseList()
+    fetchPurchaseStats()
+  } catch (error) {
+    ElMessage.error('采购失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleDetail = (row) => {
-  console.log('详情:', row)
+  router.push(`/purchase/detail/${row.orderNo}`)
 }
 
-const handleConfirm = (row) => {
-  console.log('确认:', row)
+const handleConfirm = async (row) => {
+  try {
+    await ElMessageBox.confirm('确认通过该采购?', '提示', { type: 'warning' })
+    loading.value = true
+    await confirmPurchase(row.orderNo)
+    ElMessage.success('确认成功')
+    fetchPurchaseList()
+    fetchManualConfirmList()
+    fetchPurchaseStats()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('确认失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleReject = (row) => {
-  console.log('拒绝:', row)
+const handleReject = async (row) => {
+  try {
+    const { value: reason } = await ElMessageBox.prompt('请输入拒绝原因', '拒绝采购', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /\S+/,
+      inputErrorMessage: '请输入拒绝原因'
+    })
+    loading.value = true
+    await rejectPurchase(row.id || row.orderNo, { reason })
+    ElMessage.success('已拒绝该采购')
+    fetchManualConfirmList()
+    fetchPurchaseList()
+    fetchPurchaseStats()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

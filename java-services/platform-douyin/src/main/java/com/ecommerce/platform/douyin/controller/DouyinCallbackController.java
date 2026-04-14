@@ -1,8 +1,12 @@
 package com.ecommerce.platform.douyin.controller;
 
+import com.ecommerce.common.util.SignatureUtil;
+import com.ecommerce.platform.douyin.config.DouyinConfig;
 import com.ecommerce.platform.douyin.service.DouyinMessageService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,10 +19,38 @@ import java.util.Map;
 public class DouyinCallbackController {
     
     private final DouyinMessageService messageService;
+    private final DouyinConfig douyinConfig;
+    private final ObjectMapper objectMapper;
     
     @PostMapping("/callback/message")
-    public ResponseEntity<String> handleMessage(@RequestBody Map<String, Object> payload) {
-        log.info("收到抖音消息回调: {}", payload);
+    public ResponseEntity<String> handleMessage(
+            @RequestParam(required = false) String signature,
+            @RequestParam(required = false) String timestamp,
+            @RequestParam(required = false) String nonce,
+            @RequestBody Map<String, Object> payload) {
+        log.info("收到抖音消息回调: signature={}, timestamp={}, nonce={}, payload={}", 
+                signature, timestamp, nonce, payload);
+        
+        if (signature == null || timestamp == null || nonce == null) {
+            log.warn("缺少签名验证参数");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("{\"err_no\":400,\"err_msg\":\"missing signature parameters\"}");
+        }
+        
+        try {
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            String dataToSign = SignatureUtil.buildSignatureData(timestamp, nonce, payloadJson);
+            
+            if (!SignatureUtil.verifySignature(dataToSign, signature, douyinConfig.getAppSecret())) {
+                log.warn("签名验证失败: signature={}", signature);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("{\"err_no\":403,\"err_msg\":\"signature verification failed\"}");
+            }
+        } catch (Exception e) {
+            log.error("签名验证异常", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"err_no\":500,\"err_msg\":\"signature verification error\"}");
+        }
         
         String eventType = (String) payload.get("type");
         
@@ -39,6 +71,13 @@ public class DouyinCallbackController {
             @RequestParam String echostr
     ) {
         log.info("抖音回调验证: signature={}, timestamp={}, nonce={}", signature, timestamp, nonce);
+        
+        String dataToSign = SignatureUtil.buildSignatureData(timestamp, nonce, echostr);
+        if (!SignatureUtil.verifySignature(dataToSign, signature, douyinConfig.getAppSecret())) {
+            log.warn("回调验证签名失败");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("signature verification failed");
+        }
+        
         return ResponseEntity.ok(echostr);
     }
     

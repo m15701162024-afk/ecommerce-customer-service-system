@@ -56,8 +56,8 @@
             </el-table-column>
             <el-table-column prop="desc" label="说明" />
             <el-table-column label="操作" width="100">
-              <template #default>
-                <el-button type="primary" link>去处理</el-button>
+              <template #default="{ row }">
+                <el-button type="primary" link @click="handleTaskAction(row)">去处理</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -91,35 +91,74 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
+import { getOrderList, getOrderTrend, getPlatformDistribution } from '@/api/order'
+import { getPurchaseStats } from '@/api/purchase'
+import { getChatSessions } from '@/api/chat'
 
 const chartType = ref('week')
+const loading = ref(false)
 
 const statsCards = ref([
-  { title: '今日订单', value: '1,234', icon: 'List', color: '#409eff' },
-  { title: '今日销售额', value: '¥89,432', icon: 'Money', color: '#67c23a' },
-  { title: '待处理客服', value: '56', icon: 'Service', color: '#e6a23c' },
-  { title: '待采购订单', value: '23', icon: 'ShoppingCart', color: '#f56c6c' }
+  { title: '今日订单', value: '0', icon: 'List', color: '#409eff' },
+  { title: '今日销售额', value: '¥0', icon: 'Money', color: '#67c23a' },
+  { title: '待处理客服', value: '0', icon: 'Service', color: '#e6a23c' },
+  { title: '待采购订单', value: '0', icon: 'ShoppingCart', color: '#f56c6c' }
 ])
 
-const pendingTasks = ref([
-  { type: '待发货', count: 45, desc: '订单已付款，等待发货' },
-  { type: '待采购', count: 23, desc: '订单需要采购货源' },
-  { type: '客服消息', count: 56, desc: '未回复的客户消息' },
-  { type: '退款申请', count: 8, desc: '待处理的退款请求' }
-])
-
-const latestOrders = ref([
-  { orderNo: 'DD202401150001', platform: '抖音', amount: 299.00, status: '待发货' },
-  { orderNo: 'DD202401150002', platform: '淘宝', amount: 158.00, status: '已发货' },
-  { orderNo: 'DD202401150003', platform: '小红书', amount: 89.00, status: '待采购' },
-  { orderNo: 'DD202401150004', platform: '抖音', amount: 459.00, status: '已完成' },
-  { orderNo: 'DD202401150005', platform: '淘宝', amount: 128.00, status: '待支付' }
-])
+const pendingTasks = ref([])
+const latestOrders = ref([])
 
 const orderChartRef = ref(null)
 const platformChartRef = ref(null)
+
+// 获取仪表盘统计数据
+const fetchDashboardStats = async () => {
+  loading.value = true
+  try {
+    // 获取今日订单数
+    const orderRes = await getOrderList({ page: 1, size: 1, date: 'today' })
+    const todayOrderCount = orderRes.data?.total || 0
+    
+    // 获取采购统计
+    const purchaseRes = await getPurchaseStats()
+    const todaySales = purchaseRes.data?.todayAmount || 0
+    const pendingPurchase = purchaseRes.data?.pendingCount || 0
+    
+    // 获取客服消息数
+    const chatRes = await getChatSessions({ unread: true })
+    const pendingChat = chatRes.data?.length || 0
+    
+    // 更新统计卡片
+    statsCards.value[0].value = todayOrderCount.toString()
+    statsCards.value[1].value = `¥${todaySales.toFixed(2)}`
+    statsCards.value[2].value = pendingChat.toString()
+    statsCards.value[3].value = pendingPurchase.toString()
+    
+    // 更新待处理任务
+    pendingTasks.value = [
+      { type: '待发货', count: orderRes.data?.toShipCount || 0, desc: '订单已付款，等待发货' },
+      { type: '待采购', count: pendingPurchase, desc: '订单需要采购货源' },
+      { type: '客服消息', count: pendingChat, desc: '未回复的客户消息' },
+      { type: '退款申请', count: orderRes.data?.refundCount || 0, desc: '待处理的退款请求' }
+    ]
+    
+    // 获取最新订单
+    const latestRes = await getOrderList({ page: 1, size: 5 })
+    latestOrders.value = (latestRes.data?.list || []).map(order => ({
+      orderNo: order.orderNo,
+      platform: order.platform,
+      amount: order.amount,
+      status: order.statusText || order.status
+    }))
+  } catch (error) {
+    ElMessage.error('获取统计数据失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 const getPlatformType = (platform) => {
   const types = { '抖音': 'danger', '淘宝': 'warning', '小红书': 'success' }
@@ -131,52 +170,106 @@ const getStatusType = (status) => {
   return types[status] || 'info'
 }
 
+const handleTaskAction = (row) => {
+  const routeMap = {
+    '待发货': '/orders?status=to_ship',
+    '待采购': '/purchase?status=pending',
+    '客服消息': '/customer-service',
+    '退款申请': '/after-sale?status=PENDING'
+  }
+  const route = routeMap[row.type]
+  if (route) {
+    window.location.href = route
+  }
+}
+
 onMounted(() => {
+  fetchDashboardStats()
   initOrderChart()
   initPlatformChart()
 })
 
-const initOrderChart = () => {
+watch(chartType, () => {
+  initOrderChart()
+})
+
+const initOrderChart = async () => {
   const chart = echarts.init(orderChartRef.value)
-  const option = {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['订单数', '销售额'] },
-    xAxis: {
-      type: 'category',
-      data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-    },
-    yAxis: [
-      { type: 'value', name: '订单数' },
-      { type: 'value', name: '销售额(元)' }
-    ],
-    series: [
-      { name: '订单数', type: 'bar', data: [120, 200, 150, 80, 70, 110, 130] },
-      { name: '销售额', type: 'line', yAxisIndex: 1, data: [2400, 4000, 3000, 1600, 1400, 2200, 2600] }
-    ]
+  
+  try {
+    const params = { range: chartType.value }
+    const res = await getOrderTrend(params)
+    
+    const xAxisData = res.data?.dates || []
+    const orderCounts = res.data?.orderCounts || []
+    const salesAmounts = res.data?.salesAmounts || []
+    
+    if (xAxisData.length === 0) {
+      chart.setOption({
+        title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+        xAxis: { type: 'category', data: [] },
+        yAxis: [{ type: 'value', name: '订单数' }, { type: 'value', name: '销售额(元)' }],
+        series: []
+      }, true)
+      return
+    }
+    
+    const option = {
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['订单数', '销售额'] },
+      xAxis: { type: 'category', data: xAxisData },
+      yAxis: [{ type: 'value', name: '订单数' }, { type: 'value', name: '销售额(元)' }],
+      series: [
+        { name: '订单数', type: 'bar', data: orderCounts },
+        { name: '销售额', type: 'line', yAxisIndex: 1, data: salesAmounts }
+      ]
+    }
+    chart.setOption(option, true)
+  } catch (error) {
+    chart.setOption({
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+      xAxis: { type: 'category', data: [] },
+      yAxis: [{ type: 'value', name: '订单数' }, { type: 'value', name: '销售额(元)' }],
+      series: []
+    }, true)
   }
-  chart.setOption(option)
 }
 
-const initPlatformChart = () => {
+const initPlatformChart = async () => {
   const chart = echarts.init(platformChartRef.value)
-  const option = {
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
-      label: { show: false },
-      emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
-      data: [
-        { value: 1048, name: '抖音' },
-        { value: 735, name: '淘宝' },
-        { value: 580, name: '小红书' }
-      ]
-    }]
+  
+  try {
+    const res = await getPlatformDistribution()
+    const chartData = res.data || []
+    
+    if (chartData.length === 0) {
+      chart.setOption({
+        title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+        series: []
+      }, true)
+      return
+    }
+    
+    const option = {
+      tooltip: { trigger: 'item' },
+      legend: { bottom: 0 },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+        label: { show: false },
+        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+        data: chartData
+      }]
+    }
+    chart.setOption(option, true)
+  } catch (error) {
+    chart.setOption({
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+      series: []
+    }, true)
   }
-  chart.setOption(option)
 }
 </script>
 

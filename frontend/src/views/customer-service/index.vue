@@ -86,10 +86,10 @@
                 type="textarea" 
                 :rows="3" 
                 placeholder="输入消息..." 
-                @keyup.ctrl.enter="sendMessage"
+                @keyup.ctrl.enter="handleSendMessage"
               />
               <div class="input-actions">
-                <el-button type="primary" @click="sendMessage">发送</el-button>
+                <el-button type="primary" @click="handleSendMessage">发送</el-button>
               </div>
             </div>
           </div>
@@ -100,27 +100,24 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useChatStore } from '@/stores/chat'
+import { sendMessage, transferToHuman } from '@/api/chat'
+
+const router = useRouter()
+const chatStore = useChatStore()
 
 const searchKeyword = ref('')
-const unreadCount = ref(12)
 const inputMessage = ref('')
-const currentSession = ref(null)
 const messagesRef = ref(null)
 
-const sessions = ref([
-  { id: 1, buyerName: '张三', avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', lastMessage: '这个商品有货吗？', time: '10:30', unread: 2, platform: '抖音' },
-  { id: 2, buyerName: '李四', avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', lastMessage: '什么时候发货？', time: '09:45', unread: 1, platform: '淘宝' },
-  { id: 3, buyerName: '王五', avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', lastMessage: '好的，谢谢', time: '昨天', unread: 0, platform: '小红书' },
-  { id: 4, buyerName: '赵六', avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', lastMessage: '可以优惠吗？', time: '昨天', unread: 0, platform: '抖音' }
-])
-
-const messages = ref([
-  { id: 1, content: '您好，请问这个商品有货吗？', isOwn: false, avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', time: '10:28' },
-  { id: 2, content: '您好！该商品目前有现货，您下单后我们会在24小时内发货哦~', isOwn: true, avatar: '', time: '10:28' },
-  { id: 3, content: '好的，那我可以拍了吗？', isOwn: false, avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', time: '10:29' },
-  { id: 4, content: '当然可以！现在下单还有新人优惠券可以领取哦，满100减20，非常划算！', isOwn: true, avatar: '', time: '10:30' }
-])
+const sessions = ref([])
+const currentSession = ref(null)
+const messages = ref([])
+const loading = ref(false)
+const unreadCount = ref(0)
 
 const quickReplies = ref([
   '您好，有什么可以帮助您的？',
@@ -130,44 +127,119 @@ const quickReplies = ref([
   '这是我们的优惠活动'
 ])
 
+// 获取会话列表
+const fetchSessions = async () => {
+  try {
+    await chatStore.fetchSessions()
+    sessions.value = chatStore.sessions
+    unreadCount.value = sessions.value.reduce((sum, s) => sum + (s.unread || 0), 0)
+  } catch (error) {
+    ElMessage.error('获取会话列表失败')
+  }
+}
+
+// 选择会话
+const selectSession = async (session) => {
+  currentSession.value = session
+  session.unread = 0
+  try {
+    await chatStore.fetchMessages(session.id)
+    messages.value = chatStore.messages
+    nextTick(() => {
+      scrollToBottom()
+    })
+  } catch (error) {
+    ElMessage.error('获取消息失败')
+  }
+}
+
+// 滚动到底部
+const scrollToBottom = () => {
+  if (messagesRef.value) {
+    messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+  }
+}
+
 const getPlatformType = (platform) => {
   const types = { '抖音': 'danger', '淘宝': 'warning', '小红书': 'success' }
   return types[platform] || 'info'
 }
 
-const selectSession = (session) => {
-  currentSession.value = session
-  session.unread = 0
-}
-
-const sendMessage = () => {
-  if (!inputMessage.value.trim()) return
+const handleSendMessage = async () => {
+  if (!inputMessage.value.trim() || !currentSession.value) return
+  const content = inputMessage.value.trim()
+  inputMessage.value = ''
+  
+  // 添加本地消息
   messages.value.push({
     id: Date.now(),
-    content: inputMessage.value,
+    content,
     isOwn: true,
     avatar: '',
     time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   })
-  inputMessage.value = ''
+  
+  nextTick(() => scrollToBottom())
+  
+  try {
+    loading.value = true
+    const res = await sendMessage({ session_id: currentSession.value.id, message: content })
+    if (res.data?.reply) {
+      messages.value.push({
+        id: Date.now() + 1,
+        content: res.data.reply,
+        isOwn: false,
+        avatar: currentSession.value?.avatar || '',
+        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      })
+      nextTick(() => scrollToBottom())
+    }
+  } catch (error) {
+    ElMessage.error('发送失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const sendQuickReply = (reply) => {
   inputMessage.value = reply
-  sendMessage()
+  handleSendMessage()
 }
 
-const handleTransferToHuman = () => {
-  console.log('转人工客服')
+const handleTransferToHuman = async () => {
+  if (!currentSession.value) {
+    ElMessage.warning('请先选择会话')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('确认将该会话转给人工客服处理?', '提示', { type: 'warning' })
+    loading.value = true
+    await transferToHuman(currentSession.value.id, { reason: '用户请求转人工' })
+    ElMessage.success('已转人工客服处理')
+    // 更新会话状态
+    currentSession.value.status = 'transferred'
+    // 刷新会话列表
+    fetchSessions()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('转人工失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleViewOrder = () => {
-  console.log('查看订单')
+  if (!currentSession.value?.orderNo) {
+    ElMessage.warning('该会话暂无关联订单')
+    return
+  }
+  router.push(`/orders/detail/${currentSession.value.orderNo}`)
 }
 
-if (sessions.value.length > 0) {
-  currentSession.value = sessions.value[0]
-}
+onMounted(() => {
+  fetchSessions()
+})
 </script>
 
 <style lang="scss" scoped>

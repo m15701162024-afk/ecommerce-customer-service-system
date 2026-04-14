@@ -1,0 +1,129 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: platform-1688-service
+  
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+    
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:localhost:8080}
+        port: ${SENTINEL_PORT:8719}
+      eager: true
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: platform-1688-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+  
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+  
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# 1688开放平台配置
+a1688:
+  app-key: ${A1688_APP_KEY:your_app_key}
+  app-secret: ${A1688_APP_SECRET:your_app_secret}
+  api-url: ${A1688_API_URL:https://gw.open.1688.com/openapi}
+  auth-url: ${A1688_AUTH_URL:https://auth.1688.com/oauth/authorize}
+  token-url: ${A1688_TOKEN_URL:https://gw.open.1688.com/openapi/token}
+  callback-url: ${A1688_CALLBACK_URL:http://localhost:8083/api/v1/platform/1688/auth/callback}
+  
+  # 重试配置
+  retry:
+    max-attempts: 3
+    initial-interval: 1000
+    max-interval: 10000
+    multiplier: 2.0
+  
+  # 熔断配置
+  circuit-breaker:
+    failure-threshold: 5
+    wait-duration-in-open-state: 30000
+    permitted-calls-in-half-open-state: 3
+  
+  # 限流配置
+  rate-limit:
+    requests-per-second: 100
+    timeout: 5000
+
+# 管理端点配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.ecommerce.platform.a1688: DEBUG
+    org.springframework.web: INFO
+    org.springframework.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+
+# 缓存配置
+cache:
+  type: redis
+  redis:
+    time-to-live: 3600000  # 1小时
+    cache-null-values: false
+
+# Resilience4j配置
+resilience4j:
+  circuitbreaker:
+    instances:
+      a1688-api:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-type: COUNT_BASED
+        automatic-transition-from-open-to-half-open-enabled: true
+  
+  retry:
+    instances:
+      a1688-api:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException

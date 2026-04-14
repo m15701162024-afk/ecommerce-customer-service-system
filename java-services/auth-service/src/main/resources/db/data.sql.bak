@@ -1,0 +1,18 @@
+-- Authentication Service Initial Data
+-- Default users for authentication
+
+-- Default admin user (password: admin123)
+-- BCrypt encoded password
+INSERT INTO users (username, password, email, role, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'admin@ecommerce.com', 'ADMIN', TRUE, TRUE, TRUE, TRUE)
+ON DUPLICATE KEY UPDATE username = username;
+
+-- Default agent user (password: agent123)
+INSERT INTO users (username, password, email, role, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+VALUES ('agent', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'agent@ecommerce.com', 'AGENT', TRUE, TRUE, TRUE, TRUE)
+ON DUPLICATE KEY UPDATE username = username;
+
+-- Default regular user (password: user123)
+INSERT INTO users (username, password, email, role, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+VALUES ('user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'user@ecommerce.com', 'USER', TRUE, TRUE, TRUE, TRUE)
+ON DUPLICATE KEY UPDATE username = username;

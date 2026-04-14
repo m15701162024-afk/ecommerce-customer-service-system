@@ -44,6 +44,28 @@
           <el-icon><Monitor /></el-icon>
           <span>系统监控</span>
         </el-menu-item>
+        <el-menu-item index="/work-order">
+          <el-icon><Ticket /></el-icon>
+          <span>工单管理</span>
+        </el-menu-item>
+        <el-menu-item index="/after-sale">
+          <el-icon><RefreshLeft /></el-icon>
+          <span>售后管理</span>
+        </el-menu-item>
+        <el-menu-item index="/customer">
+          <el-icon><User /></el-icon>
+          <span>客户管理</span>
+        </el-menu-item>
+        <el-sub-menu index="/settings">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统设置</span>
+          </template>
+          <el-menu-item index="/settings/account-binding">
+            <el-icon><Link /></el-icon>
+            <span>账号绑定</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
     <el-container>
@@ -64,10 +86,10 @@
               <span class="username">管理员</span>
             </span>
             <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item>个人设置</el-dropdown-item>
-                <el-dropdown-item divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
+<el-dropdown-menu>
+                 <el-dropdown-item>个人设置</el-dropdown-item>
+                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
+               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
@@ -81,12 +103,22 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta?.title || '')
+
+const handleLogout = async () => {
+  await userStore.logoutAction()
+  ElMessage.success('已退出登录')
+  router.push('/login')
+}
 </script>
 
 <style lang="scss" scoped>

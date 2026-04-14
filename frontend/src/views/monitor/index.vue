@@ -60,62 +60,114 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
+import { getServiceHealth, getSystemLogs, getRequestTrend, getResponseDistribution } from '@/api/monitor'
 
 const requestChartRef = ref(null)
 const responseChartRef = ref(null)
+const loading = ref(false)
 
-const serviceStatus = ref([
-  { name: 'API Gateway', healthy: true, cpu: 23, memory: 45 },
-  { name: 'Order Service', healthy: true, cpu: 34, memory: 56 },
-  { name: 'Purchase Service', healthy: true, cpu: 12, memory: 34 },
-  { name: 'Customer Service', healthy: true, cpu: 45, memory: 67 },
-  { name: 'Redis Cluster', healthy: true, cpu: 8, memory: 23 },
-  { name: 'Kafka', healthy: true, cpu: 15, memory: 34 }
-])
-
-const logs = ref([
-  { time: '2024-01-15 14:30:25', level: 'INFO', service: 'API Gateway', message: 'Request processed successfully' },
-  { time: '2024-01-15 14:30:24', level: 'WARN', service: 'Order Service', message: 'Order timeout, retrying...' },
-  { time: '2024-01-15 14:30:23', level: 'INFO', service: 'Purchase Service', message: 'Purchase order created: PO202401150001' },
-  { time: '2024-01-15 14:30:22', level: 'ERROR', service: 'Customer Service', message: 'AI service response timeout' },
-  { time: '2024-01-15 14:30:21', level: 'INFO', service: 'Redis Cluster', message: 'Cache hit ratio: 85.6%' }
-])
+const serviceStatus = ref([])
+const logs = ref([])
 
 const getLogLevelType = (level) => {
   const types = { INFO: 'info', WARN: 'warning', ERROR: 'danger' }
   return types[level] || 'info'
 }
 
-onMounted(() => {
-  initRequestChart()
-  initResponseChart()
-})
-
-const initRequestChart = () => {
-  const chart = echarts.init(requestChartRef.value)
-  chart.setOption({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['14:00', '14:05', '14:10', '14:15', '14:20', '14:25', '14:30'] },
-    yAxis: { type: 'value' },
-    series: [{ data: [120, 200, 150, 80, 70, 110, 130], type: 'line', smooth: true, areaStyle: {} }]
-  })
+const fetchServiceStatus = async () => {
+  try {
+    const res = await getServiceHealth()
+    serviceStatus.value = res.data?.services || []
+  } catch (error) {
+    serviceStatus.value = []
+  }
 }
 
-const initResponseChart = () => {
+const fetchLogs = async () => {
+  try {
+    const res = await getSystemLogs({ page: 1, size: 50 })
+    logs.value = res.data?.list || []
+  } catch (error) {
+    logs.value = []
+  }
+}
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    await fetchServiceStatus()
+    await fetchLogs()
+    await initRequestChart()
+    await initResponseChart()
+  } finally {
+    loading.value = false
+  }
+})
+
+const initRequestChart = async () => {
+  const chart = echarts.init(requestChartRef.value)
+  
+  try {
+    const res = await getRequestTrend()
+    const times = res.data?.times || []
+    const counts = res.data?.counts || []
+    
+    if (times.length === 0) {
+      chart.setOption({
+        title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+        xAxis: { type: 'category', data: [] },
+        yAxis: { type: 'value' },
+        series: []
+      }, true)
+      return
+    }
+    
+    chart.setOption({
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: times },
+      yAxis: { type: 'value' },
+      series: [{ data: counts, type: 'line', smooth: true, areaStyle: {} }]
+    }, true)
+  } catch (error) {
+    chart.setOption({
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+      xAxis: { type: 'category', data: [] },
+      yAxis: { type: 'value' },
+      series: []
+    }, true)
+  }
+}
+
+const initResponseChart = async () => {
   const chart = echarts.init(responseChartRef.value)
-  chart.setOption({
-    tooltip: { trigger: 'item' },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      data: [
-        { value: 1048, name: '<100ms' },
-        { value: 735, name: '100-500ms' },
-        { value: 580, name: '500ms-1s' },
-        { value: 484, name: '>1s' }
-      ]
-    }]
-  })
+  
+  try {
+    const res = await getResponseDistribution()
+    const chartData = res.data || []
+    
+    if (chartData.length === 0) {
+      chart.setOption({
+        title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+        series: []
+      }, true)
+      return
+    }
+    
+    chart.setOption({
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        data: chartData
+      }]
+    }, true)
+  } catch (error) {
+    chart.setOption({
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } },
+      series: []
+    }, true)
+  }
 }
 </script>
 

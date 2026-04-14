@@ -1,0 +1,107 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: platform-1688-service
+  
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+    sentinel:
+      enabled: false
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: platform-1688-group-dev
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+  
+  redis:
+    host: localhost
+    port: 6379
+    password: 
+    database: 0
+
+redisson:
+  enabled: false
+  
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+a1688:
+  app-key: dev_app_key
+  app-secret: dev_app_secret
+  api-url: https://gw.open.1688.com/openapi
+  auth-url: https://auth.1688.com/oauth/authorize
+  token-url: https://gw.open.1688.com/openapi/token
+  callback-url: http://localhost:8089/api/v1/platform/1688/auth/callback
+  retry:
+    max-attempts: 3
+    initial-interval: 1000
+    max-interval: 10000
+    multiplier: 2.0
+  circuit-breaker:
+    failure-threshold: 5
+    wait-duration-in-open-state: 30000
+    permitted-calls-in-half-open-state: 3
+  rate-limit:
+    requests-per-second: 100
+    timeout: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.ecommerce.platform.a1688: DEBUG
+    org.springframework.web: INFO
+    org.springframework.kafka: WARN
+
+cache:
+  type: simple
+
+resilience4j:
+  circuitbreaker:
+    enabled: false
+  retry:
+    enabled: falsespring:
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false

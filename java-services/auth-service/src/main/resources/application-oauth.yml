@@ -1,0 +1,38 @@
+# OAuth Configuration for Third-party Platform Binding
+# 
+# This configuration file contains OAuth settings for:
+# - Douyin (抖音)
+# - Xiaohongshu (小红书)
+# - 1688 (阿里巴巴)
+
+oauth:
+  platforms:
+    # Douyin OAuth Configuration
+    douyin:
+      app-id: ${DOUYIN_APP_ID:your_douyin_app_id}
+      app-secret: ${DOUYIN_APP_SECRET:your_douyin_app_secret}
+      redirect-uri: ${DOUYIN_REDIRECT_URI:http://localhost:8080/oauth/douyin/callback}
+      authorize-url: https://developer.toutiao.com/api/oauth2/authorize
+      token-url: https://developer.toutiao.com/api/oauth2/access_token/
+      user-info-url: https://developer.toutiao.com/api/oauth2/get_user_info/
+      display-name: 抖音
+    
+    # Xiaohongshu OAuth Configuration
+    xiaohongshu:
+      app-id: ${XIAOHONGSHU_APP_ID:your_xiaohongshu_app_id}
+      app-secret: ${XIAOHONGSHU_APP_SECRET:your_xiaohongshu_app_secret}
+      redirect-uri: ${XIAOHONGSHU_REDIRECT_URI:http://localhost:8080/oauth/xiaohongshu/callback}
+      authorize-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/authorize
+      token-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/access_token
+      user-info-url: https://api.xiaohongshu.com/api/sns/v1/user/info
+      display-name: 小红书
+    
+    # 1688 (Alibaba) OAuth Configuration
+    a1688:
+      app-id: ${1688_APP_KEY:your_1688_app_key}
+      app-secret: ${1688_APP_SECRET:your_1688_app_secret}
+      redirect-uri: ${1688_REDIRECT_URI:http://localhost:8080/oauth/a1688/callback}
+      authorize-url: https://auth.1688.com/oauth/authorize
+      token-url: https://auth.1688.com/oauth/token
+      user-info-url: https://api.1688.com/api/user/info
+      display-name: 1688

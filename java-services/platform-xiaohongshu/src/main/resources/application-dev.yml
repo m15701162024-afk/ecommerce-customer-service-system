@@ -1,0 +1,70 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: platform-xiaohongshu
+  
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: xiaohongshu-platform-dev
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+redisson:
+  enabled: false
+
+xiaohongshu:
+  app-id: dev-app-id
+  app-secret: dev-app-secret
+  api-url: https://api.xiaohongshu.com
+  auth-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/authorize
+  token-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/token
+  callback-url: http://localhost:8088/api/v1/platform/xiaohongshu
+
+resilience4j:
+  retry:
+    enabled: false
+  circuitbreaker:
+    enabled: false
+  ratelimiter:
+    enabled: false
+
+logging:
+  level:
+    com.ecommerce.platform.xiaohongshu: DEBUG
+    org.springframework.web: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: alwaysspring:
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false

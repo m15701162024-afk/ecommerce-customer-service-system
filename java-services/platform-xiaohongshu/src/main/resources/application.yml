@@ -1,0 +1,77 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: platform-xiaohongshu
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: xiaohongshu-platform
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+# 小红书平台配置
+xiaohongshu:
+  app-id: ${XIAOHONGSHU_APP_ID:your-app-id}
+  app-secret: ${XIAOHONGSHU_APP_SECRET:your-app-secret}
+  api-url: https://api.xiaohongshu.com
+  auth-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/authorize
+  token-url: https://api.xiaohongshu.com/api/sns/v1/oauth2/token
+  callback-url: ${XIAOHONGSHU_CALLBACK_URL:http://localhost:8086/api/v1/platform/xiaohongshu}
+
+# Resilience4j 配置 - 重试、熔断、限流
+resilience4j:
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 1s
+        exponentialBackoffMultiplier: 2
+    instances:
+      xiaohongshuApi:
+        baseConfig: default
+        maxAttempts: 3
+        waitDuration: 2s
+
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        slidingWindowType: COUNT_BASED
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        minimumNumberOfCalls: 5
+    instances:
+      xiaohongshuApi:
+        baseConfig: default
+        failureRateThreshold: 60
+        waitDurationInOpenState: 60s
+
+  ratelimiter:
+    configs:
+      default:
+        limitForPeriod: 100
+        limitRefreshPeriod: 1s
+        timeoutDuration: 5s
+    instances:
+      xiaohongshuApi:
+        limitForPeriod: 50
+        limitRefreshPeriod: 1s
+        timeoutDuration: 10s
+
+logging:
+  level:
+    com.ecommerce.platform.xiaohongshu: DEBUG
+    org.springframework.web: INFO
+    io.github.resilience4j: DEBUG

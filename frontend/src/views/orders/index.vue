@@ -64,7 +64,15 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useOrderStore } from '@/stores/order'
+import { createPurchase } from '@/api/purchase'
+import { updateOrderStatus } from '@/api/order'
+
+const router = useRouter()
+const orderStore = useOrderStore()
 
 const loading = ref(false)
 const filters = reactive({
@@ -76,16 +84,34 @@ const filters = reactive({
 const pagination = reactive({
   page: 1,
   size: 10,
-  total: 100
+  total: 0
 })
 
-const orderList = ref([
-  { orderNo: 'DD202401150001', platform: '抖音', buyerName: '张三', productName: 'iPhone 15 Pro Max 256GB', amount: 8999, status: 'to_purchase', statusText: '待采购', createdAt: '2024-01-15 10:30:00' },
-  { orderNo: 'DD202401150002', platform: '淘宝', buyerName: '李四', productName: 'MacBook Air M3', amount: 8499, status: 'to_ship', statusText: '待发货', createdAt: '2024-01-15 11:20:00' },
-  { orderNo: 'DD202401150003', platform: '小红书', buyerName: '王五', productName: 'AirPods Pro 2', amount: 1899, status: 'shipped', statusText: '已发货', createdAt: '2024-01-15 09:15:00' },
-  { orderNo: 'DD202401150004', platform: '抖音', buyerName: '赵六', productName: 'iPad Pro 12.9', amount: 10999, status: 'completed', statusText: '已完成', createdAt: '2024-01-14 15:45:00' },
-  { orderNo: 'DD202401150005', platform: '淘宝', buyerName: '钱七', productName: 'Apple Watch Ultra 2', amount: 6499, status: 'pending', statusText: '待支付', createdAt: '2024-01-15 14:00:00' }
-])
+const orderList = ref([])
+
+// 获取订单列表
+const fetchOrderList = async () => {
+  loading.value = true
+  try {
+    await orderStore.fetchOrderList({
+      page: pagination.page,
+      size: pagination.size,
+      platform: filters.platform,
+      status: filters.status,
+      keyword: filters.keyword
+    })
+    orderList.value = orderStore.orderList
+    pagination.total = orderStore.total
+  } catch (error) {
+    ElMessage.error('获取订单列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchOrderList()
+})
 
 const getPlatformType = (platform) => {
   const types = { '抖音': 'danger', '淘宝': 'warning', '小红书': 'success' }
@@ -98,19 +124,44 @@ const getStatusType = (status) => {
 }
 
 const handleSearch = () => {
-  console.log('搜索:', filters)
+  pagination.page = 1
+  fetchOrderList()
 }
 
 const handleDetail = (row) => {
-  console.log('查看详情:', row)
+  router.push(`/orders/detail/${row.orderNo}`)
 }
 
-const handlePurchase = (row) => {
-  console.log('采购:', row)
+const handlePurchase = async (row) => {
+  try {
+    await ElMessageBox.confirm('确认采购该订单?', '提示', { type: 'warning' })
+    loading.value = true
+    await createPurchase({ orderNo: row.orderNo })
+    ElMessage.success('采购订单创建成功')
+    fetchOrderList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('采购失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleShip = (row) => {
-  console.log('发货:', row)
+const handleShip = async (row) => {
+  try {
+    await ElMessageBox.confirm('确认发货?', '提示', { type: 'warning' })
+    loading.value = true
+    await updateOrderStatus(row.orderNo, 'shipped')
+    ElMessage.success('发货成功')
+    fetchOrderList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('发货失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
